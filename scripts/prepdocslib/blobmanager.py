@@ -1,3 +1,9 @@
+""" 
+Initializes a BlobManager with Azure Blob Storage settings derived from command-line arguments. 
+This manager handles file uploads to Azure Blob Storage.
+"""
+
+
 import datetime
 import io
 import os

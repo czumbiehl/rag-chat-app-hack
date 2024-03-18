@@ -32,12 +32,14 @@ from prepdocslib.strategy import DocumentAction, SearchInfo, Strategy
 from prepdocslib.textparser import TextParser
 from prepdocslib.textsplitter import SentenceTextSplitter, SimpleTextSplitter
 
-
+# fonction utilitaire pour déterminer si certains arguments ont été fournis
 def is_key_empty(key):
     return key is None or len(key.strip()) == 0
 
 
 async def setup_file_strategy(credential: AsyncTokenCredential, args: Any) -> Strategy:
+    # 1 initialization du blob manager
+    ##################################
     storage_creds = credential if is_key_empty(args.storagekey) else args.storagekey
     blob_manager = BlobManager(
         endpoint=f"https://{args.storageaccount}.blob.core.windows.net",
@@ -49,7 +51,8 @@ async def setup_file_strategy(credential: AsyncTokenCredential, args: Any) -> St
         store_page_images=args.searchimages,
         verbose=args.verbose,
     )
-
+    # 2 initialisation des parsers
+    ##############################
     html_parser: Parser
     pdf_parser: Parser
     doc_int_parser: DocumentAnalysisParser
@@ -74,6 +77,9 @@ async def setup_file_strategy(credential: AsyncTokenCredential, args: Any) -> St
         html_parser = LocalHTMLParser(verbose=args.verbose)
     else:
         html_parser = doc_int_parser
+
+    # 3 configuration des fileprocessor - stratégie de découpage en chunks
+    ######################################################################
     sentence_text_splitter = SentenceTextSplitter(has_image_embeddings=args.searchimages)
     file_processors = {
         ".pdf": FileProcessor(pdf_parser, sentence_text_splitter),
@@ -91,6 +97,9 @@ async def setup_file_strategy(credential: AsyncTokenCredential, args: Any) -> St
         ".md": FileProcessor(TextParser(), sentence_text_splitter),
         ".txt": FileProcessor(TextParser(), sentence_text_splitter),
     }
+
+    # 4 Initialisation des services d'embeddings
+    ############################################
     use_vectors = not args.novectors
     embeddings: Optional[OpenAIEmbeddings] = None
     if use_vectors and args.openaihost != "openai":
@@ -113,7 +122,8 @@ async def setup_file_strategy(credential: AsyncTokenCredential, args: Any) -> St
             disable_batch=args.disablebatchvectors,
             verbose=args.verbose,
         )
-
+    # 5 Initialisation de l'embedding d'images (si activé)
+    ###################################################
     image_embeddings: Optional[ImageEmbeddings] = None
 
     if args.searchimages:
@@ -123,6 +133,8 @@ async def setup_file_strategy(credential: AsyncTokenCredential, args: Any) -> St
             verbose=args.verbose,
         )
 
+    # 6 Configuration de listFile Strategy
+    #####################################
     print("Processing files...")
     list_file_strategy: ListFileStrategy
     if args.datalakestorageaccount:
@@ -146,6 +158,8 @@ async def setup_file_strategy(credential: AsyncTokenCredential, args: Any) -> St
     else:
         document_action = DocumentAction.Add
 
+    # 7. Creation et return de l'objet Strategy
+    ############################################
     return FileStrategy(
         list_file_strategy=list_file_strategy,
         blob_manager=blob_manager,
@@ -160,6 +174,9 @@ async def setup_file_strategy(credential: AsyncTokenCredential, args: Any) -> St
 
 
 async def setup_intvectorizer_strategy(credential: AsyncTokenCredential, args: Any) -> Strategy:
+
+    # 1 initialization du blob manager
+    ##################################
     storage_creds = credential if is_key_empty(args.storagekey) else args.storagekey
     blob_manager = BlobManager(
         endpoint=f"https://{args.storageaccount}.blob.core.windows.net",
@@ -172,6 +189,8 @@ async def setup_intvectorizer_strategy(credential: AsyncTokenCredential, args: A
         verbose=args.verbose,
     )
 
+    # 2 Initialisation des services d'embeddings
+    ############################################
     use_vectors = not args.novectors
     embeddings: Union[AzureOpenAIEmbeddingService, None] = None
     if use_vectors and args.openaihost != "openai":
@@ -187,6 +206,8 @@ async def setup_intvectorizer_strategy(credential: AsyncTokenCredential, args: A
             verbose=args.verbose,
         )
 
+    # 3 Configuration de listFile Strategy
+    #####################################
     print("Processing files...")
     list_file_strategy: ListFileStrategy
     if args.datalakestorageaccount:
@@ -210,6 +231,8 @@ async def setup_intvectorizer_strategy(credential: AsyncTokenCredential, args: A
     else:
         document_action = DocumentAction.Add
 
+    # 4. Creation et return de l'objet Strategy
+    ############################################
     return IntegratedVectorizerStrategy(
         list_file_strategy=list_file_strategy,
         blob_manager=blob_manager,
@@ -246,7 +269,8 @@ async def main(strategy: Strategy, credential: AsyncTokenCredential, args: Any):
 
     await strategy.run(search_info)
 
-
+# Point d'entrée
+################
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Prepare documents by extracting content from PDFs, splitting content into sections, uploading to blob storage, and indexing in a search index.",
@@ -412,6 +436,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     use_int_vectorization = args.useintvectorization and args.useintvectorization.lower() == "true"
 
+
+    # MAIN
+    ###########################################################################
     # Use the current user identity to connect to Azure services unless a key is explicitly set for any of them
     azd_credential = (
         AzureDeveloperCliCredential()
